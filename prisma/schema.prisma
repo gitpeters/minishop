@@ -1,0 +1,156 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User{
+  id Int @id @default(autoincrement())
+  publicId String @unique @default(uuid())
+  email String @unique
+  password String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  firstName String?
+  lastName String?
+  isEnabled Boolean @default(false)
+  verificationToken String?
+  tokenExpiredAt DateTime?
+  lastLogin DateTime?
+  isAccountDeleted Boolean?
+  changedPasswordAt DateTime?
+  refreshToken String?
+  roles UserRole[]
+  address Address?
+
+  orders Order[]
+
+  @@map("users")
+}
+
+model Address{
+  id Int @id @default(autoincrement())
+  publicId String @unique @default(uuid())
+  street String
+  city String 
+  houseNumber String?
+  country String 
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String @unique
+  user User @relation(fields: [userId], references: [publicId], onDelete: Cascade)
+
+  @@map("addresses")
+}
+
+model Role{
+  id Int @id @default(autoincrement())
+  publicId String @unique @default(uuid())
+  name String @unique
+  description String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  users UserRole[]
+  @@map("roles")
+}
+
+model UserRole {
+  userId     String
+  roleId     String
+  user       User      @relation(fields: [userId], references: [publicId], onDelete: Cascade)
+  role       Role      @relation(fields: [roleId], references: [publicId], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+
+model Product{
+  id Int @id @default(autoincrement())
+  publicId String @unique @default(uuid())
+  name String @unique
+  description String?
+  availableQuantity Int
+  price BigInt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  categories Category[]
+  orderLines OrderLine[]
+  
+
+  @@map("products")
+}
+
+model Category{
+  id Int @id @default(autoincrement())
+  publicId String @unique @default(uuid())
+  name String @unique
+  description String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  productId String 
+  product Product @relation(fields: [productId], references: [publicId], onDelete: Cascade)
+
+  @@map("categories")
+}
+
+model OrderLine{
+  id Int @id @default(autoincrement())
+  publicId String @unique @default(uuid())
+  quantity Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  productId String
+  product Product @relation(fields: [productId], references: [publicId], onDelete: Cascade)
+  orderId String
+  order Order @relation(fields: [orderId], references: [publicId], onDelete: Cascade)
+
+  @@map("order_lines")
+}
+
+model Order{
+  id Int @id @default(autoincrement())
+  publicId String @unique @default(uuid())
+  reference String
+  orderDate DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  userId String
+  user User @relation(fields: [userId], references: [publicId], onDelete: Cascade)
+  
+  orderLines OrderLine[]
+
+  payment Payment?
+
+  @@map("orders")
+}
+
+model Payment{
+  id Int @id @default(autoincrement())
+  publicId String @unique @default(uuid())
+  reference String @unique
+  amount BigInt
+  status PaymentStatus @default(PENDING)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orderId String @unique
+  order Order @relation(fields: [orderId], references: [publicId], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+enum PaymentStatus{
+  PENDING
+  PAID
+  FAILED
+  CANCELLED
+}
+

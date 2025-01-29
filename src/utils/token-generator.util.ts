@@ -26,3 +26,16 @@ export const generateRandomDigit = (length: number): string => {
   }
   return randomDigits.slice(0, length);
 };
+
+export const parseExpiration = (expiration: string): number => {
+  const num = parseInt(expiration, 10); // Extract the number part
+  if (expiration.includes('d')) {
+    return num * 24 * 60 * 60 * 1000; // Convert days to milliseconds
+  } else if (expiration.includes('h')) {
+    return num * 60 * 60 * 1000; // Convert hours to milliseconds
+  } else if (expiration.includes('m')) {
+    return num * 60 * 1000; // Convert minutes to milliseconds
+  } else {
+    throw new Error(`Invalid expiration format: ${expiration}`);
+  }
+};

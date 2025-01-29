@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   Logger,
@@ -9,6 +10,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import {
   LoginRequest,
   LoginResponse,
+  RefreshTokenDecode,
   ResetPasswordRequest,
   SignupRequest,
 } from './dto';
@@ -18,7 +20,11 @@ import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { UserRoleService } from 'src/user-role/user-role.service';
 import { AssignRole } from 'src/user-role/dto';
 import { MailerService } from 'src/mailer/mailer.service';
-import { generateRandomDigit, generateRandomString } from 'src/utils';
+import {
+  generateRandomDigit,
+  generateRandomString,
+  parseExpiration,
+} from 'src/utils';
 import { User } from '@prisma/client';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -69,6 +75,26 @@ export class AuthService {
         }
       }
     }
+  }
+
+  async resendVerificationToken(email: string): Promise<void> {
+    if (!email) throw new BadRequestException('Email address is required');
+
+    const user = await this.prisma.user.findUnique({ where: { email: email } });
+
+    if (!user) throw new NotFoundException('User not found');
+
+    const verificationToken = user.id + generateRandomString(10);
+    const hashedToken = await argon.hash(verificationToken);
+    const tokenExpiredAt = new Date(Date.now() + 10 * 60 * 1000);
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        verificationToken: hashedToken,
+        tokenExpiredAt: tokenExpiredAt,
+      },
+    });
+    this.mailer.sendVerificationEmail(user.email, verificationToken);
   }
 
   async login(request: LoginRequest): Promise<LoginResponse> {
@@ -173,6 +199,51 @@ export class AuthService {
     return this.generateAccessToken(user, userRoles);
   }
 
+  async refreshToken(refreshToken: string): Promise<LoginResponse> {
+    const decoded: RefreshTokenDecode = this.jwt.decode(refreshToken);
+
+    if (!decoded || !decoded.userId) {
+      throw new UnauthorizedException('Invalid or malformed refresh token');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { publicId: decoded.userId },
+      include: { roles: { include: { role: true } } },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('Invalid or malformed refresh token');
+    }
+
+    if (!user.refreshToken) {
+      throw new UnauthorizedException('Invalid or malformed refresh token');
+    }
+
+    const isTokenVerified = await argon.verify(user.refreshToken, refreshToken);
+
+    if (!isTokenVerified) {
+      throw new UnauthorizedException('Invalid or malformed refresh token');
+    }
+
+    if (user.isAccountDeleted) {
+      throw new ForbiddenException('User account has been deactivated');
+    }
+
+    if (user.changedPasswordAt) {
+      const passwordChangedTimestamp = user.changedPasswordAt.getTime() / 1000;
+
+      if (decoded.iat < passwordChangedTimestamp) {
+        throw new UnauthorizedException(
+          'Password was recently changed. Please log in again.',
+        );
+      }
+    }
+
+    const userRoles = user.roles.map((role) => role.role.name);
+
+    return this.generateAccessToken(user, userRoles);
+  }
+
   private async generateAccessToken(user: User, userRoles: string[]) {
     const payload = {
       sub: user.publicId,
@@ -215,13 +286,10 @@ export class AuthService {
       });
 
       const accessTokenExpirationDate = new Date(
-        Date.now() +
-          parseInt(accessTokenExpireAt.split('')[0], 10) * 60 * 60 * 1000,
+        Date.now() + parseExpiration(accessTokenExpireAt),
       );
-
       const refreshTokenExpirationDate = new Date(
-        Date.now() +
-          parseInt(refreshTokenExpireAt.split('')[0], 10) * 60 * 60 * 1000,
+        Date.now() + parseExpiration(refreshTokenExpireAt),
       );
 
       const loginResponse: LoginResponse = {

@@ -6,7 +6,7 @@ import { RoleResponse, RoleUser } from './dto';
 export class RoleHelper {
   constructor() {}
 
-  async mapToRoleResponse(role: Role, users: User[]): Promise<RoleResponse> {
+  mapToRoleResponse(role: Role, users: User[]): RoleResponse {
     const response: RoleResponse = new RoleResponse();
     response.publicId = role.publicId; // Assuming Role has a publicId
     response.name = role.name;

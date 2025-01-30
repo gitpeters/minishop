@@ -28,6 +28,8 @@ import {
 import { User } from '@prisma/client';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { APIResponse } from 'src/common';
+import { AuthHelper } from './helper';
 
 @Injectable()
 export class AuthService {
@@ -38,6 +40,7 @@ export class AuthService {
     private readonly mailer: MailerService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
+    private readonly helper: AuthHelper,
   ) {}
 
   async signup(request: SignupRequest): Promise<void> {
@@ -97,7 +100,7 @@ export class AuthService {
     this.mailer.sendVerificationEmail(user.email, verificationToken);
   }
 
-  async login(request: LoginRequest): Promise<LoginResponse> {
+  async login(request: LoginRequest): Promise<APIResponse<LoginResponse>> {
     const user = await this.prisma.user.findUnique({
       where: { email: request.email },
       include: { roles: { include: { role: true } } },
@@ -125,10 +128,19 @@ export class AuthService {
     }
 
     const userRoles = user.roles.map((role) => role.role.name);
-    return this.generateAccessToken(user, userRoles);
+    const loginResponse = await this.helper.generateAccessToken(
+      user,
+      userRoles,
+    );
+    const hashedRefreshToken = await argon.hash(loginResponse.refreshToken);
+    this.prisma.user.update({
+      where: { id: user.id },
+      data: { refreshToken: hashedRefreshToken },
+    });
+    return new APIResponse('success', loginResponse);
   }
 
-  async verifyAccount(token: string): Promise<LoginResponse> {
+  async verifyAccount(token: string): Promise<APIResponse<LoginResponse>> {
     if (!token) {
       throw new UnauthorizedException('Invalid verification token');
     }
@@ -144,10 +156,14 @@ export class AuthService {
 
     await this.prisma.user.update({
       where: { id: userId },
-      data: { isEnabled: true },
+      data: { isEnabled: true, verificationToken: null, tokenExpiredAt: null },
     });
     const userRoles = user.roles.map((role) => role.role.name);
-    return this.generateAccessToken(user, userRoles);
+    const loginResponse = await this.helper.generateAccessToken(
+      user,
+      userRoles,
+    );
+    return new APIResponse('success', loginResponse);
   }
 
   async resetPassword(email: string): Promise<void> {
@@ -173,7 +189,7 @@ export class AuthService {
 
   async confirmPasswordReset(
     request: ResetPasswordRequest,
-  ): Promise<LoginResponse> {
+  ): Promise<APIResponse<LoginResponse>> {
     const userId = parseInt(request.otp.split('')[0], 10);
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -191,15 +207,23 @@ export class AuthService {
       where: { id: userId },
       data: {
         isEnabled: true,
+        verificationToken: null,
+        tokenExpiredAt: null,
         password: hashedPassword,
         changedPasswordAt: new Date(Date.now()),
       },
     });
     const userRoles = user.roles.map((role) => role.role.name);
-    return this.generateAccessToken(user, userRoles);
+    const loginResponse = await this.helper.generateAccessToken(
+      user,
+      userRoles,
+    );
+    return new APIResponse('success', loginResponse);
   }
 
-  async refreshToken(refreshToken: string): Promise<LoginResponse> {
+  async refreshToken(
+    refreshToken: string,
+  ): Promise<APIResponse<LoginResponse>> {
     const decoded: RefreshTokenDecode = this.jwt.decode(refreshToken);
 
     if (!decoded || !decoded.userId) {
@@ -241,68 +265,11 @@ export class AuthService {
 
     const userRoles = user.roles.map((role) => role.role.name);
 
-    return this.generateAccessToken(user, userRoles);
-  }
-
-  private async generateAccessToken(user: User, userRoles: string[]) {
-    const payload = {
-      sub: user.publicId,
-      email: user.email,
-      accessType: 'accessToken',
-      permissions: userRoles,
-    };
-
-    const accessTokenExpireAt = this.config.get<string>(
-      'ACCESS_TOKEN_EXPIRE_AT',
-      '1d',
+    const loginResponse = await this.helper.generateAccessToken(
+      user,
+      userRoles,
     );
-    const refreshTokenExpireAt = this.config.get<string>(
-      'REFRESH_TOKEN_EXPIRE_AT',
-      '7d',
-    );
-    try {
-      const accessToken = await this.jwt.signAsync(payload, {
-        expiresIn: accessTokenExpireAt,
-        secret: this.config.get<string>('ACCESS_TOKEN_SECRET'),
-        algorithm: 'HS256',
-      });
-
-      const userId = user.publicId;
-
-      const refreshToken = await this.jwt.signAsync(
-        { userId, accessType: 'refreshToken' },
-        {
-          expiresIn: refreshTokenExpireAt,
-          secret: this.config.get<string>('REFRESH_TOKEN_SECRET'),
-          algorithm: 'HS256',
-        },
-      );
-
-      const hashedRefreshToken = await argon.hash(refreshToken);
-
-      await this.prisma.user.update({
-        where: { id: user.id },
-        data: { refreshToken: hashedRefreshToken },
-      });
-
-      const accessTokenExpirationDate = new Date(
-        Date.now() + parseExpiration(accessTokenExpireAt),
-      );
-      const refreshTokenExpirationDate = new Date(
-        Date.now() + parseExpiration(refreshTokenExpireAt),
-      );
-
-      const loginResponse: LoginResponse = {
-        accessToken: accessToken,
-        refreshToken: refreshToken,
-        accessTokenExpiredAt: accessTokenExpirationDate,
-        refreshTokenExpiredAt: refreshTokenExpirationDate,
-      };
-
-      return loginResponse;
-    } catch (error) {
-      throw new Error('Failed to generate token');
-    }
+    return new APIResponse('success', loginResponse);
   }
 
   private async verifyToken(token: string, user: User) {

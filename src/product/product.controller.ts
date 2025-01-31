@@ -4,8 +4,10 @@ import {
   Delete,
   Get,
   Param,
+  ParseIntPipe,
   Patch,
   Post,
+  Query,
   UploadedFiles,
   UseGuards,
   UseInterceptors,
@@ -42,7 +44,7 @@ export class ProductController {
     return this.service.createProduct(createProduct, files);
   }
 
-  @Patch('/:productId')
+  @Patch('/update/:productId')
   @Roles('ADMIN', 'PRODUCT_MANAGER')
   @UseInterceptors(FilesInterceptor('images', 5))
   async updateProduct(
@@ -51,6 +53,15 @@ export class ProductController {
     @UploadedFiles() files: Express.Multer.File[] | null,
   ) {
     return await this.service.updateProduct(productId, updateRequest, files);
+  }
+
+  @Patch('/restock')
+  @Roles('ADMIN', 'STORE_KEEPER')
+  async updateProductQuantity(
+    @Query('productId') productId: string,
+    @Query('quantity', ParseIntPipe) quantity: number,
+  ) {
+    return await this.service.restockProduct(productId, quantity);
   }
 
   @Delete('/:productId')

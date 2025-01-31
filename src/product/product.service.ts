@@ -254,6 +254,33 @@ export class ProductService {
     }
   }
 
+  async restockProduct(
+    productId: string,
+    quantity: number,
+  ): Promise<APIResponse<ProductResponse>> {
+    this.logger.log({ productId, quantity });
+
+    if (!quantity || quantity <= 0) {
+      throw new BadRequestException(
+        'Quantity cannot be empty or negative value',
+      );
+    }
+    const product = await this.prisma.product.update({
+      where: { publicId: productId },
+      data: { availableQuantity: quantity },
+      include: { category: true, images: true },
+    });
+
+    if (!product) throw new NotFoundException('Product not found');
+
+    const categoryName = product.category?.name ?? null;
+    const images = product.images?.map((img) => img.url) ?? [];
+
+    const response = this.mapToProductResponse(product, categoryName, images);
+
+    return new APIResponse('success', response);
+  }
+
   private mapToProductResponse(
     product: Product,
     categoryName: string | null,

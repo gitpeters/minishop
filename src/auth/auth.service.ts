@@ -20,11 +20,7 @@ import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { UserRoleService } from 'src/user-role/user-role.service';
 import { AssignRole } from 'src/user-role/dto';
 import { MailerService } from 'src/mailer/mailer.service';
-import {
-  generateRandomDigit,
-  generateRandomString,
-  parseExpiration,
-} from 'src/utils';
+import { generateRandomDigit, generateRandomString } from 'src/utils';
 import { User } from '@prisma/client';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';

@@ -78,12 +78,22 @@ model Product{
   price BigInt
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-  categories Category[]
+  categoryId String
+  category Category @relation(fields: [categoryId], references: [publicId], onDelete: Cascade)
   orderLines OrderLine[]
+  images ProductImage[]
   
-
   @@map("products")
+}
+
+model ProductImage{
+  id Int @id @default(autoincrement())
+  url String
+  publicId String
+  originalFileName String
+  productId String
+  product Product @relation(fields: [productId], references: [publicId], onDelete: Cascade)
+  @@map("product_images")
 }
 
 model Category{
@@ -92,10 +102,8 @@ model Category{
   name String @unique
   description String?
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  productId String 
-  product Product @relation(fields: [productId], references: [publicId], onDelete: Cascade)
+  updatedAt DateTime @updatedAt 
+  product Product[]
 
   @@map("categories")
 }

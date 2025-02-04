@@ -1,6 +1,7 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaClient } from '@prisma/client';
+import { generateRandomString } from 'src/utils';
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit {

@@ -27,6 +27,7 @@ model User{
   address Address?
 
   orders Order[]
+  cart Cart?
 
   @@map("users")
 }
@@ -82,6 +83,7 @@ model Product{
   category Category @relation(fields: [categoryId], references: [publicId], onDelete: Cascade)
   orderLines OrderLine[]
   images ProductImage[]
+  cartItems CartItem[]
   
   @@map("products")
 }
@@ -153,6 +155,32 @@ model Payment{
   order Order @relation(fields: [orderId], references: [publicId], onDelete: Cascade)
 
   @@map("payments")
+}
+
+model Cart {
+  id Int @id @default(autoincrement())
+  publicId String @unique @default(uuid())
+  userId String @unique  // One cart per user
+  user User @relation(fields: [userId], references: [publicId], onDelete: Cascade)
+  items CartItem[]
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  @@map("carts")
+}
+
+model CartItem {
+  id Int @id @default(autoincrement())
+  publicId String @unique @default(uuid())
+  quantity Int
+  cartId String
+  cart Cart @relation(fields: [cartId], references: [publicId], onDelete: Cascade)
+  productId String
+  product Product @relation(fields: [productId], references: [publicId], onDelete: Cascade)
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  @@map("cart_items")
 }
 
 enum PaymentStatus{

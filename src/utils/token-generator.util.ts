@@ -39,3 +39,27 @@ export const parseExpiration = (expiration: string): number => {
     throw new Error(`Invalid expiration format: ${expiration}`);
   }
 };
+
+export function transformBigInts(obj: any): any {
+  if (obj === null || obj === undefined) {
+    return obj;
+  }
+
+  if (typeof obj === 'bigint') {
+    return Number(obj);
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map(transformBigInts);
+  }
+
+  if (typeof obj === 'object') {
+    const transformed = {};
+    for (const key in obj) {
+      transformed[key] = transformBigInts(obj[key]);
+    }
+    return transformed;
+  }
+
+  return obj;
+}
